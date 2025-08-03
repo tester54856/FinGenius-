@@ -1,45 +1,60 @@
-import {
-  Strategy as JwtStrategy,
-  ExtractJwt,
-  StrategyOptions,
-} from "passport-jwt";
 import passport from "passport";
-import { Env } from "./env.config";
-import { findByIdUserService } from "../services/user.service";
+import { Strategy as JwtStrategy, ExtractJwt } from "passport-jwt";
+import { getEnv } from "../utils/get-env";
+import User from "../models/user.model";
+import { AppError } from "../utils/app-error";
 
-interface JwtPayload {
-  userId: string;
+const jwtSecret = getEnv("JWT_SECRET");
+const jwtRefreshSecret = getEnv("JWT_REFRESH_SECRET");
+
+if (!jwtSecret || !jwtRefreshSecret) {
+  throw new Error("JWT secrets are not configured");
 }
 
-const options: StrategyOptions = {
-  jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
-  secretOrKey: Env.JWT_SECRET,
-  audience: ["user"],
-  algorithms: ["HS256"],
-};
-
-passport.use(
-  new JwtStrategy(options, async (payload: JwtPayload, done) => {
+// JWT Strategy for access tokens
+const jwtStrategy = new JwtStrategy(
+  {
+    jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
+    secretOrKey: jwtSecret,
+  },
+  async (payload: any, done: any) => {
     try {
-      if (!payload.userId) {
-        return done(null, false, { message: "Invalid token payload" });
-      }
-
-      const user = await findByIdUserService(payload.userId);
+      const user = await User.findById(payload.id).select("-password");
+      
       if (!user) {
         return done(null, false);
       }
-
+      
       return done(null, user);
     } catch (error) {
       return done(error, false);
     }
-  })
+  }
 );
 
-passport.serializeUser((user: any, done) => done(null, user));
-passport.deserializeUser((user: any, done) => done(null, user));
+// JWT Strategy for refresh tokens
+const jwtRefreshStrategy = new JwtStrategy(
+  {
+    jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
+    secretOrKey: jwtRefreshSecret,
+  },
+  async (payload: any, done: any) => {
+    try {
+      const user = await User.findById(payload.id).select("-password");
+      
+      if (!user) {
+        return done(null, false);
+      }
+      
+      return done(null, user);
+    } catch (error) {
+      return done(error, false);
+    }
+  }
+);
 
-export const passportAuthenticateJwt = passport.authenticate("jwt", {
-  session: false,
-});
+// Configure passport
+passport.use("jwt", jwtStrategy);
+passport.use("jwt-refresh", jwtRefreshStrategy);
+
+export default passport;

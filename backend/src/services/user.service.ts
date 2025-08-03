@@ -9,21 +9,36 @@ export const findByIdUserService = async (userId: string) => {
 
 export const updateUserService = async (
   userId: string,
-  body: UpdateUserType,
-  profilePic?: Express.Multer.File
-) => {
-  const user = await UserModel.findById(userId);
-  if (!user) throw new NotFoundException("User not found");
+  updateData: any,
+  profilePic?: any
+): Promise<any> => {
+  try {
+    const user = await UserModel.findById(userId);
+    if (!user) {
+      throw new NotFoundException("User not found");
+    }
 
-  if (profilePic) {
-    user.profilePicture = profilePic.path;
+    // Handle profile picture upload
+    if (profilePic) {
+      const { uploadToCloudinary } = await import("../config/cloudinary.config");
+      const imageUrl = await uploadToCloudinary(profilePic);
+      updateData.profilePic = imageUrl;
+    }
+
+    const updatedUser = await UserModel.findByIdAndUpdate(
+      userId,
+      { $set: updateData },
+      { new: true, runValidators: true }
+    ).select("-password");
+
+    return {
+      success: true,
+      data: updatedUser,
+    };
+  } catch (error) {
+    console.error("Update user error:", error);
+    throw new NotFoundException(
+      "Failed to update user"
+    );
   }
-
-  user.set({
-    name: body.name,
-  });
-
-  await user.save();
-
-  return user.omitPassword();
 };

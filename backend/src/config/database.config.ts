@@ -1,18 +1,27 @@
 import mongoose from "mongoose";
-import { Env } from "./env.config";
+import { getEnv } from "../utils/get-env";
 
-const connctDatabase = async () => {
+const connectDB = async (): Promise<void> => {
   try {
-    await mongoose.connect(Env.MONGO_URI, {
-      serverSelectionTimeoutMS: 8000,
+    const mongoURI = getEnv("MONGO_URI");
+    
+    if (!mongoURI) {
+      throw new Error("MONGO_URI is not defined in environment variables");
+    }
+
+    const options: any = {
+      serverSelectionTimeoutMS: 5000,
       socketTimeoutMS: 45000,
-      connectTimeoutMS: 30000,
-    });
-    console.log("Connected to MongoDB database");
+      connectTimeoutMS: 10000,
+    };
+
+    await mongoose.connect(mongoURI, options);
+    
+    console.log("✅ MongoDB connected successfully");
   } catch (error) {
-    console.error("Error connecting to MongoDB database:", error);
+    console.error("❌ MongoDB connection error:", error);
     process.exit(1);
   }
 };
 
-export default connctDatabase;
+export default connectDB;

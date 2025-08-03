@@ -11,6 +11,7 @@ import {
 import { genAI, genAIModel } from "../config/google-ai.config";
 import { createPartFromBase64, createUserContent } from "@google/genai";
 import { receiptPrompt } from "../utils/prompt";
+import { AppError, ErrorCode } from "../utils/app-error";
 
 export const createTransactionService = async (
   body: CreateTransactionType,
@@ -261,146 +262,64 @@ export const bulkTransactionService = async (
   }
 };
 
-export const scanReceiptService = async (
-  file: Express.Multer.File | undefined
-) => {
-  if (!file) throw new BadRequestException("No file uploaded");
-
+export const scanReceiptService = async (file: any): Promise<any> => {
   try {
-    console.log("Starting receipt scan for file:", file.originalname);
-    console.log("File path:", file.path);
-    console.log("File mimetype:", file.mimetype);
-    console.log("File size:", file.size);
-
-    // Check if we have the required API key
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      console.error("❌ GEMINI_API_KEY is not configured");
-      throw new BadRequestException("AI service is not configured - missing API key");
-    }
-    
-    console.log("✅ GEMINI_API_KEY is configured (length:", apiKey.length, ")");
-
-    if (!file.path) throw new BadRequestException("Failed to upload file");
-
-    let base64String: string;
-
-    // Handle both local file paths and Cloudinary URLs
-    if (file.path.startsWith('http')) {
-      // It's a Cloudinary URL, fetch the image
-      console.log("Fetching image from Cloudinary URL:", file.path);
-      const responseData = await axios.get(file.path, {
-        responseType: "arraybuffer",
-        timeout: 10000, // 10 second timeout
-      });
-      base64String = Buffer.from(responseData.data).toString("base64");
-      console.log("✅ Successfully fetched image from Cloudinary");
-    } else {
-      // It's a local file path, read directly
-      console.log("Reading local file:", file.path);
-      const fs = require('fs');
-      const fileBuffer = fs.readFileSync(file.path);
-      base64String = fileBuffer.toString("base64");
-      console.log("✅ Successfully read local file");
+    if (!file) {
+      throw new AppError("No file provided", 400, ErrorCode.FILE_UPLOAD_ERROR);
     }
 
-    if (!base64String) {
-      throw new BadRequestException("Could not process file");
-    }
+    const { GoogleGenerativeAI } = await import("@google/generative-ai");
+    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
 
-    console.log("Base64 string length:", base64String.length);
+    const model = genAI.getGenerativeModel({ model: "gemini-pro-vision" });
 
-    // Call Google AI API
-    console.log("Calling Google AI API with model:", genAIModel);
-    const result = await genAI.models.generateContent({
-      model: genAIModel,
-      contents: [
-        createUserContent([
-          receiptPrompt,
-          createPartFromBase64(base64String, file.mimetype),
-        ]),
-      ],
-      config: {
-        temperature: 0,
-        topP: 1,
-        responseMimeType: "application/json",
+    const imageData = file.buffer;
+    const imagePart = {
+      inlineData: {
+        data: imageData.toString("base64"),
+        mimeType: file.mimetype,
       },
-    });
-
-    console.log("✅ AI Response received:", result.text);
-
-    const response = result.text;
-    const cleanedText = response?.replace(/```(?:json)?\n?/g, "").trim();
-
-    if (!cleanedText) {
-      console.error("Empty response from AI");
-      return {
-        error: "Could not read receipt content",
-      };
-    }
-
-    console.log("Cleaned response:", cleanedText);
-
-    let data;
-    try {
-      data = JSON.parse(cleanedText);
-    } catch (parseError) {
-      console.error("JSON parsing error:", parseError);
-      console.error("Raw response:", cleanedText);
-      return {
-        error: "Invalid response format from AI service",
-      };
-    }
-
-    console.log("Parsed data:", data);
-
-    if (!data.amount || !data.date) {
-      console.error("Missing required fields:", { amount: data.amount, date: data.date });
-      return { error: "Receipt missing required information" };
-    }
-
-    const resultData = {
-      title: data.title || "Receipt",
-      amount: data.amount,
-      date: data.date,
-      description: data.description,
-      category: data.category,
-      paymentMethod: data.paymentMethod,
-      type: data.type,
-      receiptUrl: file.path,
     };
 
-    console.log("✅ Successfully processed receipt:", resultData);
-    return resultData;
-
-  } catch (error) {
-    console.error("❌ Receipt scanning error:", error);
-    
-    // Provide more specific error messages
-    if (error instanceof BadRequestException) {
-      throw error;
-    }
-    
-    // Type guard for axios errors
-    if (error && typeof error === 'object' && 'code' in error) {
-      const axiosError = error as any;
-      if (axiosError.code === 'ENOTFOUND' || axiosError.code === 'ECONNREFUSED') {
-        return { error: "Network error - unable to reach AI service" };
-      }
-    }
-    
-    // Type guard for response errors
-    if (error && typeof error === 'object' && 'response' in error) {
-      const responseError = error as any;
-      if (responseError.response?.status === 401) {
-        return { error: "AI service authentication failed - check your API key" };
+    const prompt = `
+      Analyze this receipt image and extract the following information in JSON format:
+      {
+        "amount": "total amount",
+        "date": "transaction date",
+        "merchant": "store/merchant name",
+        "category": "expense category (e.g., food, transportation, shopping, etc.)",
+        "description": "brief description of items"
       }
       
-      if (responseError.response?.status === 429) {
-        return { error: "AI service rate limit exceeded" };
-      }
+      Please ensure:
+      - Amount is a number (no currency symbols)
+      - Date is in YYYY-MM-DD format
+      - Category is one of: food, transportation, shopping, entertainment, health, education, utilities, other
+      - If any field cannot be determined, use null
+    `;
+
+    const result = await model.generateContent([prompt, imagePart]);
+    const response = await result.response;
+    const text = response.text();
+
+    // Extract JSON from response
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      throw new AppError("Could not parse receipt data", 400, ErrorCode.VALIDATION_ERROR);
     }
+
+    const receiptData = JSON.parse(jsonMatch[0]);
     
-    return { error: "Receipt scanning service unavailable" };
+    return {
+      success: true,
+      data: receiptData,
+    };
+  } catch (error) {
+    console.error("Receipt scanning error:", error);
+    throw new AppError(
+      "Failed to scan receipt",
+      500,
+      ErrorCode.INTERNAL_SERVER_ERROR
+    );
   }
 };

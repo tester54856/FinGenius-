@@ -1,37 +1,51 @@
 import { v2 as cloudinary } from "cloudinary";
-import { CloudinaryStorage } from "multer-storage-cloudinary";
-import { Env } from "./env.config";
 import multer from "multer";
 
+// Configure Cloudinary
 cloudinary.config({
-  cloud_name: Env.CLOUDINARY_CLOUD_NAME,
-  api_key: Env.CLOUDINARY_API_KEY,
-  api_secret: Env.CLOUDINARY_API_SECRET,
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-const STORAGE_PARAMS = {
-  folder: "images",
-  allowed_formats: ["jpg", "png", "jpeg"],
-  rescource_type: "image" as const,
-  quality: "auto:good" as const,
-};
+// Configure multer for memory storage
+const storage = multer.memoryStorage();
 
-const storage = new CloudinaryStorage({
-  cloudinary,
-  params: (req, file) => ({
-    ...STORAGE_PARAMS,
-  }),
-});
-
-export const upload = multer({
-  storage,
-  limits: { fileSize: 2 * 1024 * 1024, files: 1 },
-  fileFilter: (_, file, cb) => {
-    const isValid = /^image\/(jpe?g|png)$/.test(file.mimetype);
-    if (!isValid) {
-      return;
+// Configure multer upload
+const upload = multer({
+  storage: storage,
+  limits: {
+    fileSize: 5 * 1024 * 1024, // 5MB limit
+  },
+  fileFilter: (req: any, file: any, cb: any) => {
+    // Check file type
+    if (file.mimetype.startsWith("image/")) {
+      cb(null, true);
+    } else {
+      cb(new Error("Only image files are allowed!"), false);
     }
-
-    cb(null, true);
   },
 });
+
+// Upload to Cloudinary function
+const uploadToCloudinary = async (file: any): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream(
+      {
+        folder: "fingenius",
+        resource_type: "auto",
+      },
+      (error, result) => {
+        if (error) {
+          reject(error);
+        } else {
+          resolve(result?.secure_url || "");
+        }
+      }
+    );
+
+    stream.end(file.buffer);
+  });
+};
+
+export { cloudinary, upload, uploadToCloudinary };

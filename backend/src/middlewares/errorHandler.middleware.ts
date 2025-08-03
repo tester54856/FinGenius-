@@ -1,68 +1,89 @@
-import { Response } from "express";
-import { z, ZodError } from "zod";
-import { ErrorRequestHandler } from "express";
-import { HTTPSTATUS } from "../config/http.config";
+import { Request, Response, NextFunction } from "express";
+import multer from "multer";
 import { AppError } from "../utils/app-error";
-import { ErrorCodeEnum } from "../enums/error-code.enum";
-import { MulterError } from "multer";
+import { ErrorCode } from "../enums/error-code.enum";
 
-const formatZodError = (res: Response, error: z.ZodError) => {
-  const errors = error?.issues?.map((err) => ({
-    field: err.path.join("."),
-    message: err.message,
-  }));
-  return res.status(HTTPSTATUS.BAD_REQUEST).json({
-    message: "Validation failed",
-    errors: errors,
-    errorCode: ErrorCodeEnum.VALIDATION_ERROR,
-  });
-};
+interface ErrorWithCode extends Error {
+  code?: string;
+  statusCode?: number;
+}
 
-const handleMulterError = (error: MulterError) => {
-  const messages = {
-    LIMIT_UNEXPECTED_FILE: "Invalid file field name. Please use 'file'",
-    LIMIT_FILE_SIZE: "File size exceeds the limit",
-    LIMIT_FILE_COUNT: "Too many files uploaded",
-    default: "File upload error",
-  };
+const errorHandler = (
+  error: ErrorWithCode,
+  req: Request,
+  res: Response,
+  next: NextFunction
+): void => {
+  let statusCode = 500;
+  let message = "Internal Server Error";
+  let errorCode = ErrorCode.INTERNAL_SERVER_ERROR;
 
-  return {
-    status: HTTPSTATUS.BAD_REQUEST,
-    message: messages[error.code as keyof typeof messages] || messages.default,
-    error: error.message,
-  };
-};
-
-export const errorHandler: ErrorRequestHandler = (
-  error,
-  req,
-  res,
-  next
-): any => {
-  console.log("Error occurred on PATH:", req.path, "Error:", error);
-
-  if (error instanceof ZodError) {
-    return formatZodError(res, error);
+  // Handle multer errors
+  if (error instanceof multer.MulterError) {
+    if (error.code === "LIMIT_FILE_SIZE") {
+      statusCode = 400;
+      message = "File size too large. Maximum size is 5MB.";
+      errorCode = ErrorCode.FILE_TOO_LARGE;
+    } else if (error.code === "LIMIT_FILE_COUNT") {
+      statusCode = 400;
+      message = "Too many files uploaded.";
+      errorCode = ErrorCode.TOO_MANY_FILES;
+    } else {
+      statusCode = 400;
+      message = "File upload error.";
+      errorCode = ErrorCode.FILE_UPLOAD_ERROR;
+    }
+  }
+  // Handle AppError
+  else if (error instanceof AppError) {
+    statusCode = error.statusCode;
+    message = error.message;
+    errorCode = error.errorCode;
+  }
+  // Handle validation errors
+  else if (error.name === "ValidationError") {
+    statusCode = 400;
+    message = "Validation Error";
+    errorCode = ErrorCode.VALIDATION_ERROR;
+  }
+  // Handle cast errors (MongoDB)
+  else if (error.name === "CastError") {
+    statusCode = 400;
+    message = "Invalid ID format";
+    errorCode = ErrorCode.INVALID_ID;
+  }
+  // Handle duplicate key errors
+  else if (error.code === "11000") {
+    statusCode = 409;
+    message = "Duplicate field value";
+    errorCode = ErrorCode.DUPLICATE_ENTRY;
+  }
+  // Handle JWT errors
+  else if (error.name === "JsonWebTokenError") {
+    statusCode = 401;
+    message = "Invalid token";
+    errorCode = ErrorCode.INVALID_TOKEN;
+  }
+  // Handle JWT expired errors
+  else if (error.name === "TokenExpiredError") {
+    statusCode = 401;
+    message = "Token expired";
+    errorCode = ErrorCode.TOKEN_EXPIRED;
   }
 
-  if (error instanceof MulterError) {
-    const { status, message, error: err } = handleMulterError(error);
-    return res.status(status).json({
+  // Log error in development
+  if (process.env.NODE_ENV === "development") {
+    console.error("Error:", error);
+  }
+
+  res.status(statusCode).json({
+    success: false,
+    error: {
+      code: errorCode,
       message,
-      error: err,
-      errorCode: ErrorCodeEnum.FILE_UPLOAD_ERROR,
-    });
-  }
-
-  if (error instanceof AppError) {
-    return res.status(error.statusCode).json({
-      message: error.message,
-      errorCode: error.errorCode,
-    });
-  }
-
-  return res.status(HTTPSTATUS.INTERNAL_SERVER_ERROR).json({
-    message: "Internal Server Error",
-    error: error?.message || "Unknow error occurred",
+      ...(process.env.NODE_ENV === "development" && { stack: error.stack }),
+    },
   });
 };
+
+export default errorHandler;

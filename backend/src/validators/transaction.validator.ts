@@ -56,8 +56,8 @@ export const bulkTransactionSchema = z.object({
     .min(1, "At least one transaction is required")
     .max(300, "Must not be more than 300 transactions")
     .refine(
-      (txs) =>
-        txs.every((tx) => {
+      (txs: any) =>
+        txs.every((tx: any) => {
           const amount = Number(tx.amount);
           return !isNaN(amount) && amount > 0 && amount <= 1_000_000_000;
         }),

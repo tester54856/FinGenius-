@@ -244,7 +244,7 @@ export const summaryAnalyticsService = async (
     preset: {
       ...range,
       value: rangeValue || DateRangeEnum.ALL_TIME,
-      label: range?.label || "All Time",
+      label: (range as any)?.label || "All Time",
     },
   };
 };
@@ -362,7 +362,7 @@ export const chartAnalyticsService = async (
     preset: {
       ...range,
       value: rangeValue || DateRangeEnum.ALL_TIME,
-      label: range?.label || "All Time",
+      label: (range as any)?.label || "All Time",
     },
   };
 };
@@ -488,7 +488,7 @@ export const expensePieChartBreakdownService = async (
     preset: {
       ...range,
       value: rangeValue || DateRangeEnum.ALL_TIME,
-      label: range?.label || "All Time",
+      label: (range as any)?.label || "All Time",
     },
   };
 };
