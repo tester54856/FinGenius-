@@ -1,5 +1,6 @@
-import { v2 as cloudinary } from "cloudinary";
-import multer from "multer";
+import { v2 as cloudinary } from 'cloudinary';
+import multer from 'multer';
+import { Readable } from 'stream';
 
 // Configure Cloudinary
 cloudinary.config({
@@ -11,41 +12,48 @@ cloudinary.config({
 // Configure multer for memory storage
 const storage = multer.memoryStorage();
 
-// Configure multer upload
-const upload = multer({
-  storage: storage,
+export const upload = multer({
+  storage,
   limits: {
     fileSize: 5 * 1024 * 1024, // 5MB limit
   },
   fileFilter: (req: any, file: any, cb: any) => {
-    // Check file type
-    if (file.mimetype.startsWith("image/")) {
+    // Accept only images
+    if (file.mimetype.startsWith('image/')) {
       cb(null, true);
     } else {
-      cb(new Error("Only image files are allowed!"), false);
+      cb(new Error('Only image files are allowed!'), false);
     }
   },
 });
 
-// Upload to Cloudinary function
-const uploadToCloudinary = async (file: any): Promise<string> => {
+// Function to upload buffer to Cloudinary
+export const uploadToCloudinary = async (buffer: Buffer, folder: string = 'fingenius'): Promise<string> => {
   return new Promise((resolve, reject) => {
-    const stream = cloudinary.uploader.upload_stream(
+    const uploadStream = cloudinary.uploader.upload_stream(
       {
-        folder: "fingenius",
-        resource_type: "auto",
+        folder,
+        resource_type: 'auto',
       },
       (error, result) => {
         if (error) {
           reject(error);
+        } else if (result) {
+          resolve(result.secure_url);
         } else {
-          resolve(result?.secure_url || "");
+          reject(new Error('Upload failed'));
         }
       }
     );
 
-    stream.end(file.buffer);
+    // Create a readable stream from buffer
+    const readableStream = new Readable();
+    readableStream.push(buffer);
+    readableStream.push(null);
+
+    // Pipe to upload stream
+    readableStream.pipe(uploadStream);
   });
 };
 
-export { cloudinary, upload, uploadToCloudinary };
+export default cloudinary;
