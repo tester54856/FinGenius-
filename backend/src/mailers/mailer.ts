@@ -1,28 +1,31 @@
+import { Resend } from "resend";
 import { Env } from "../config/env.config";
-import { resend } from "../config/resend.config";
 
-type Params = {
-  to: string | string[];
+const resend = new Resend(Env.RESEND_API_KEY);
+
+interface EmailData {
+  to: string;
   subject: string;
-  text: string;
   html: string;
-  from?: string;
-};
+}
 
-const mailer_sender = `FinGenius <${Env.RESEND_MAILER_SENDER}>`;
+export const sendEmail = async (emailData: EmailData): Promise<any> => {
+  try {
+    const { data, error } = await resend.emails.send({
+      from: Env.RESEND_MAILER_SENDER,
+      to: emailData.to,
+      subject: emailData.subject,
+      html: emailData.html,
+    });
 
-export const sendEmail = async ({
-  to,
-  from = mailer_sender,
-  subject,
-  text,
-  html,
-}: Params) => {
-  return await resend.emails.send({
-    from,
-    to: Array.isArray(to) ? to : [to],
-    text,
-    subject,
-    html,
-  });
+    if (error) {
+      console.error("Email sending error:", error);
+      throw new Error("Failed to send email");
+    }
+
+    return data;
+  } catch (error) {
+    console.error("Email service error:", error);
+    throw new Error("Email service unavailable");
+  }
 };

@@ -13,23 +13,18 @@ export const processReportJob = async () => {
   let processedCount = 0;
   let failedCount = 0;
 
-  //Today july 1, then run report for -> june 1 - 30 
-//Get Last Month because this will run on the first of the month
+  // Get Last Month because this will run on the first of the month
   const from = startOfMonth(subMonths(now, 1));
   const to = endOfMonth(subMonths(now, 1));
 
-  // const from = "2025-04-01T23:00:00.000Z";
-  // const to = "2025-04-T23:00:00.000Z";
-
   try {
     const reportSettingCursor = ReportSettingModel.find({
-      isEnabled: true,
-      nextReportDate: { $lte: now },
+      isActive: true,
     })
       .populate<{ userId: UserDocument }>("userId")
       .cursor();
 
-    console.log("Running report ");
+    console.log("Running report job");
 
     for await (const setting of reportSettingCursor) {
       const user = setting.userId as UserDocument;
@@ -46,115 +41,61 @@ export const processReportJob = async () => {
           end: to 
         });
 
-        console.log(report, "resport data");
+        console.log("Report data:", report);
 
         let emailSent = false;
         if (report) {
           try {
             await sendReportEmail({
-              email: user.email!,
-              username: user.name!,
-              report: {
-                period: report.period,
-                totalIncome: report.summary.income,
-                totalExpenses: report.summary.expenses,
-                availableBalance: report.summary.balance,
-                savingsRate: report.summary.savingsRate,
-                topSpendingCategories: report.summary.topCategories,
-                insights: report.insights,
-              },
-              frequency: setting.frequency!,
+              to: user.email!,
+              reportData: report,
             });
             emailSent = true;
-          } catch (error) {
-            console.log(`Email failed for ${user.id}`);
+            console.log(`Email sent successfully to ${user.email}`);
+          } catch (emailError) {
+            console.error(`Email failed for ${user.email}:`, emailError);
           }
         }
 
-        await session.withTransaction(
-          async () => {
-            const bulkReports: any[] = [];
-            const bulkSettings: any[] = [];
-
-            if (report && emailSent) {
-              bulkReports.push({
-                insertOne: {
-                  document: {
-                    userId: user.id,
-                    sentDate: now,
-                    period: report.period,
-                    status: "SENT",
-                    createdAt: now,
-                    updatedAt: now,
-                  },
-                },
-              });
-
-              bulkSettings.push({
-                updateOne: {
-                  filter: { _id: setting._id },
-                  update: {
-                    $set: {
-                      lastSentDate: now,
-                      nextReportDate: calulateNextReportDate(now),
-                      updatedAt: now,
-                    },
-                  },
-                },
-              });
-            } else {
-              bulkReports.push({
-                insertOne: {
-                  document: {
-                    userId: user.id,
-                    sentDate: now,
-                    period:
-                      report?.period ||
-                      `${format(from, "MMMM d")}–${format(to, "d, yyyy")}`,
-                    status: report
-                      ? "FAILED"
-                      : "NO_ACTIVITY",
-                    createdAt: now,
-                    updatedAt: now,
-                  },
-                },
-              });
-
-              bulkSettings.push({
-                updateOne: {
-                  filter: { _id: setting._id },
-                  update: {
-                    $set: {
-                      lastSentDate: null,
-                      nextReportDate: calulateNextReportDate(now),
-                      updatedAt: now,
-                    },
-                  },
-                },
-              });
-            }
-
-            await Promise.all([
-              ReportModel.bulkWrite(bulkReports, { ordered: false }),
-              ReportSettingModel.bulkWrite(bulkSettings, { ordered: false }),
-            ]);
+        // Create report record
+        await ReportModel.create({
+          userId: user._id,
+          title: `Monthly Report - ${format(from, "MMMM yyyy")}`,
+          description: "Automated monthly financial report",
+          type: "summary",
+          dateRange: {
+            start: from,
+            end: to,
           },
+          data: report || {},
+          status: report ? (emailSent ? "completed" : "failed") : "pending",
+          createdAt: now,
+          updatedAt: now,
+        });
+
+        // Update report setting
+        await ReportSettingModel.findByIdAndUpdate(
+          setting._id,
           {
-            maxCommitTimeMS: 10000,
+            $set: {
+              updatedAt: now,
+            },
           }
         );
 
         processedCount++;
+        console.log(`✅ Processed report for user: ${user.email}`);
+
       } catch (error) {
-        console.log(`Failed to process report`, error);
+        console.error(`❌ Failed to process report for user ${user.email}:`, error);
         failedCount++;
       } finally {
         await session.endSession();
       }
     }
 
-    console.log(`✅Processed: ${processedCount} report`);
-    console.log(`❌ Failed: ${failedCount} report`);
+    console.log(`✅ Processed: ${processedCount} reports`);
+    console.log(`❌ Failed: ${failedCount} reports`);
 
     return {
       success: true,
@@ -162,7 +103,7 @@ export const processReportJob = async () => {
       failedCount,
     };
   } catch (error) {
-    console.error("Error processing reports", error);
+    console.error("Error processing reports:", error);
     return {
       success: false,
       error: "Report process failed",
