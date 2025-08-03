@@ -1,7 +1,6 @@
 import { apiClient } from "@/app/api-client";
 import {
   AIScanReceiptResponse,
-  BulkImportTransactionPayload,
   CreateTransactionBody,
   GetAllTransactionParams,
   GetAllTransactionResponse,
@@ -80,16 +79,14 @@ export const transactionApi = apiClient.injectEndpoints({
       invalidatesTags: ["transactions"],
     }),
 
-    bulkImportTransaction: builder.mutation<void, BulkImportTransactionPayload>(
-      {
-        query: (body) => ({
-          url: "/transaction/bulk-transaction",
-          method: "POST",
-          body,
-        }),
-        invalidatesTags: ["transactions"],
-      }
-    ),
+    bulkImportTransaction: builder.mutation<void, { transactions: any[] }>({
+      query: (body) => ({
+        url: "/transaction/bulk-transaction",
+        method: "POST",
+        body,
+      }),
+      invalidatesTags: ["transactions"],
+    }),
 
     deleteTransaction: builder.mutation<void, string>({
       query: (id) => ({

@@ -70,6 +70,7 @@ export interface AIScanReceiptData {
   paymentMethod: string;
   type: "INCOME" | "EXPENSE";
   receiptUrl: string;
+  error?: string;
 }
 
 export interface AIScanReceiptResponse {
@@ -98,6 +99,7 @@ export interface BulkTransactionType {
   isRecurring: boolean;
 }
 
-export interface BulkImportTransactionPayload {
+export interface BulkTransactionResponse {
+  message: string;
   transactions: BulkTransactionType[];
 }
