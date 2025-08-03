@@ -19,7 +19,7 @@ const defaults: SignOptions = {
 
 const accessTokenSignOptions: SignOptsAndSecret = {
   expiresIn: Env.JWT_EXPIRES_IN as TimeString,
-  secret: Env.JWT_SECRET,
+  secret: Env.JWT_SECRET || process.env.JWT_SECRET || "fallback_secret",
 };
 
 export const signJwtToken = (
@@ -29,6 +29,10 @@ export const signJwtToken = (
   const isAccessToken = !options || options === accessTokenSignOptions;
 
   const { secret, ...opts } = options || accessTokenSignOptions;
+
+  if (!secret) {
+    throw new Error("JWT_SECRET is not configured");
+  }
 
   const token = jwt.sign(payload, secret, {
     ...defaults,
