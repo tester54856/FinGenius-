@@ -48,39 +48,48 @@ export const loginService = async (body: LoginSchemaType) => {
   
   console.log(`🔍 Attempting login for email: ${email}`);
   
-  const user = await UserModel.findOne({ email });
-  
-  if (!user) {
-    console.log(`❌ User not found for email: ${email}`);
-    throw new NotFoundException("Email/password not found");
+  try {
+    const user = await UserModel.findOne({ email });
+    
+    if (!user) {
+      console.log(`❌ User not found for email: ${email}`);
+      throw new NotFoundException("Email/password not found");
+    }
+
+    console.log(`✅ User found: ${user.name}`);
+
+    const isPasswordValid = await user.comparePassword(password);
+
+    if (!isPasswordValid) {
+      console.log(`❌ Invalid password for user: ${email}`);
+      throw new UnauthorizedException("Invalid email/password");
+    }
+
+    console.log(`✅ Password validated for user: ${email}`);
+
+    const { token, expiresAt } = signJwtToken({ userId: user.id });
+
+    console.log(`✅ JWT token created for user: ${email}`);
+
+    const reportSetting = await ReportSettingModel.findOne(
+      {
+        userId: user.id,
+      },
+      { _id: 1, frequency: 1, isEnabled: 1 }
+    ).lean();
+
+    console.log(`✅ Report setting found for user: ${email}`);
+
+    console.log(`🎉 Login successful for user: ${email}`);
+
+    return {
+      user: user.omitPassword(),
+      accessToken: token,
+      expiresAt,
+      reportSetting,
+    };
+  } catch (error) {
+    console.error(`❌ Login error for ${email}:`, error);
+    throw error;
   }
-
-  console.log(`✅ User found: ${user.name}`);
-
-  const isPasswordValid = await user.comparePassword(password);
-
-  if (!isPasswordValid) {
-    console.log(`❌ Invalid password for user: ${email}`);
-    throw new UnauthorizedException("Invalid email/password");
-  }
-
-  console.log(`✅ Password validated for user: ${email}`);
-
-  const { token, expiresAt } = signJwtToken({ userId: user.id });
-
-  const reportSetting = await ReportSettingModel.findOne(
-    {
-      userId: user.id,
-    },
-    { _id: 1, frequency: 1, isEnabled: 1 }
-  ).lean();
-
-  console.log(`🎉 Login successful for user: ${email}`);
-
-  return {
-    user: user.omitPassword(),
-    accessToken: token,
-    expiresAt,
-    reportSetting,
-  };
 };
