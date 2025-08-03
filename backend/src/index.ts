@@ -92,6 +92,29 @@ app.get("/health", (req: Request, res: Response) => {
   });
 });
 
+// Debug endpoint to check environment variables
+app.get("/debug", (req: Request, res: Response) => {
+  const envVars = {
+    NODE_ENV: process.env.NODE_ENV,
+    MONGO_URI: process.env.MONGO_URI ? 'Set' : 'Missing',
+    JWT_SECRET: process.env.JWT_SECRET ? 'Set' : 'Missing',
+    JWT_REFRESH_SECRET: process.env.JWT_REFRESH_SECRET ? 'Set' : 'Missing',
+    GEMINI_API_KEY: process.env.GEMINI_API_KEY ? 'Set' : 'Missing',
+    CLOUDINARY_CLOUD_NAME: process.env.CLOUDINARY_CLOUD_NAME ? 'Set' : 'Missing',
+    CLOUDINARY_API_KEY: process.env.CLOUDINARY_API_KEY ? 'Set' : 'Missing',
+    CLOUDINARY_API_SECRET: process.env.CLOUDINARY_API_SECRET ? 'Set' : 'Missing',
+    RESEND_API_KEY: process.env.RESEND_API_KEY ? 'Set' : 'Missing',
+    FRONTEND_ORIGIN: process.env.FRONTEND_ORIGIN,
+  };
+  
+  res.status(HTTPSTATUS.OK).json({
+    status: "Debug Info",
+    timestamp: new Date().toISOString(),
+    environment: Env.NODE_ENV,
+    envVars,
+  });
+});
+
 // Remove test error route in production
 if (Env.NODE_ENV === "development") {
   app.get(
