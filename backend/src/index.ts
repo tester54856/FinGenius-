@@ -13,7 +13,7 @@ import connectDB from "./config/database.config";
 import authRoutes from "./routes/auth.route";
 import userRoutes from "./routes/user.route";
 import transactionRoutes from "./routes/transaction.route";
-import { initializeCrons } from "./cron";
+// import { initializeCrons } from "./cron";
 import reportRoutes from "./routes/report.route";
 import { getDateRange } from "./utils/date";
 import analyticsRoutes from "./routes/analytics.route";
@@ -139,8 +139,9 @@ app.use(errorHandler);
 const server = app.listen(Env.PORT, async () => {
   await connectDB();
 
+  // Initialize cron jobs in development
   if (Env.NODE_ENV === "development") {
-    await initializeCrons();
+    // await initializeCrons();
   }
 
   console.log(`Server is running on port ${Env.PORT} in ${Env.NODE_ENV} mode`);
