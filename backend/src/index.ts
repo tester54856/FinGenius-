@@ -18,7 +18,7 @@ import { initializeCrons } from "./cron";
 import reportRoutes from "./routes/report.route";
 import { getDateRange } from "./utils/date";
 import analyticsRoutes from "./routes/analytics.route";
-import { apiLimiter, authLimiter } from "./middlewares/rateLimit.middleware";
+// import { apiLimiter, authLimiter } from "./middlewares/rateLimit.middleware";
 
 const app = express();
 const BASE_PATH = Env.BASE_PATH;
@@ -66,8 +66,8 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 
-// Apply rate limiting
-app.use(apiLimiter);
+// Apply rate limiting - temporarily disabled
+// app.use(apiLimiter);
 
 // Health check endpoint
 app.get("/health", (req: Request, res: Response) => {
@@ -91,7 +91,7 @@ if (Env.NODE_ENV === "development") {
   );
 }
 
-app.use(`${BASE_PATH}/auth`, authLimiter, authRoutes);
+app.use(`${BASE_PATH}/auth`, authRoutes);
 app.use(`${BASE_PATH}/user`, passportAuthenticateJwt, userRoutes);
 app.use(`${BASE_PATH}/transaction`, passportAuthenticateJwt, transactionRoutes);
 app.use(`${BASE_PATH}/report`, passportAuthenticateJwt, reportRoutes);

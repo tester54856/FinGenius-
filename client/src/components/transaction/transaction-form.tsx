@@ -1,5 +1,5 @@
 import * as z from "zod";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { Calendar, Loader } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -22,11 +22,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
@@ -156,8 +151,6 @@ const TransactionForm = (props: {
 
   // Handle form submission
   const onSubmit = (values: FormValues) => {
-    // if (isCreating || isUpdating) return;
-    console.log("Form submitted:", values);
     const payload = {
       title: values.title,
       type: values.type,
@@ -334,18 +327,39 @@ const TransactionForm = (props: {
             <FormField
               control={form.control}
               name="date"
-              render={({ field }) => (
-                <FormItem className="flex flex-col">
-                  <FormLabel>Date</FormLabel>
-                  <Popover modal={false}>
-                    <PopoverTrigger asChild>
+              render={({ field }) => {
+                const [calendarOpen, setCalendarOpen] = useState(false);
+                const calendarRef = useRef<HTMLDivElement>(null);
+
+                // Handle click outside to close calendar
+                useEffect(() => {
+                  const handleClickOutside = (event: MouseEvent) => {
+                    if (calendarRef.current && !calendarRef.current.contains(event.target as Node)) {
+                      setCalendarOpen(false);
+                    }
+                  };
+
+                  if (calendarOpen) {
+                    document.addEventListener('mousedown', handleClickOutside);
+                  }
+
+                  return () => {
+                    document.removeEventListener('mousedown', handleClickOutside);
+                  };
+                }, [calendarOpen]);
+
+                return (
+                  <FormItem className="flex flex-col">
+                    <FormLabel>Date</FormLabel>
+                    <div className="relative" ref={calendarRef}>
                       <FormControl>
                         <Button
                           variant={"outline"}
                           className={cn(
-                            "w-full pl-3 text-left font-normal",
+                            "w-full pl-3 text-left font-normal !bg-[var(--secondary-dark-color)] border-gray-700 !text-white",
                             !field.value && "text-muted-foreground"
                           )}
+                          onClick={() => setCalendarOpen(!calendarOpen)}
                         >
                           {field.value ? (
                             format(field.value, "PPP")
@@ -355,26 +369,26 @@ const TransactionForm = (props: {
                           <Calendar className="ml-auto h-4 w-4 opacity-50" />
                         </Button>
                       </FormControl>
-                    </PopoverTrigger>
-                    <PopoverContent
-                      className="w-auto p-0 !pointer-events-auto"
-                      align="start"
-                    >
-                      <CalendarComponent
-                        mode="single"
-                        selected={field.value}
-                        onSelect={(date) => {
-                          console.log(date);
-                          field.onChange(date); // This updates the form value
-                        }}
-                        disabled={(date) => date < new Date("2023-01-01")}
-                        initialFocus
-                      />
-                    </PopoverContent>
-                  </Popover>
-                  <FormMessage />
-                </FormItem>
-              )}
+                      
+                      {calendarOpen && (
+                        <div className="absolute top-full left-0 mt-1 z-50 bg-[var(--secondary-dark-color)] border border-gray-700 rounded-md shadow-lg">
+                          <CalendarComponent
+                            mode="single"
+                            selected={field.value}
+                            onSelect={(date) => {
+                              field.onChange(date);
+                              setCalendarOpen(false);
+                            }}
+                            disabled={(date) => date < new Date("2023-01-01")}
+                            className="bg-[var(--secondary-dark-color)] text-white"
+                          />
+                        </div>
+                      )}
+                    </div>
+                    <FormMessage />
+                  </FormItem>
+                );
+              }}
             />
 
             {/* Payment Method */}

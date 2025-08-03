@@ -47,13 +47,26 @@ export const registerService = async (body: RegisterSchemaType) => {
 
 export const loginService = async (body: LoginSchemaType) => {
   const { email, password } = body;
+  
+  console.log(`🔍 Attempting login for email: ${email}`);
+  
   const user = await UserModel.findOne({ email });
-  if (!user) throw new NotFoundException("Email/password not found");
+  
+  if (!user) {
+    console.log(`❌ User not found for email: ${email}`);
+    throw new NotFoundException("Email/password not found");
+  }
+
+  console.log(`✅ User found: ${user.name}`);
 
   const isPasswordValid = await user.comparePassword(password);
 
-  if (!isPasswordValid)
+  if (!isPasswordValid) {
+    console.log(`❌ Invalid password for user: ${email}`);
     throw new UnauthorizedException("Invalid email/password");
+  }
+
+  console.log(`✅ Password validated for user: ${email}`);
 
   const { token, expiresAt } = signJwtToken({ userId: user.id });
 
@@ -63,6 +76,8 @@ export const loginService = async (body: LoginSchemaType) => {
     },
     { _id: 1, frequency: 1, isEnabled: 1 }
   ).lean();
+
+  console.log(`🎉 Login successful for user: ${email}`);
 
   return {
     user: user.omitPassword(),

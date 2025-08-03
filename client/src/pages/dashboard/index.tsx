@@ -8,7 +8,7 @@ import { useState } from "react";
 import { DateRangeType } from "@/components/date-range-select";
 
 const Dashboard = () => {
-  const [dateRange, _setDateRange] = useState<DateRangeType>(null);
+  const [dateRange, setDateRange] = useState<DateRangeType>(null);
 
   return (
     <div className="w-full flex flex-col">
@@ -18,7 +18,7 @@ const Dashboard = () => {
         renderPageHeader={
           <DashboardSummary
             dateRange={dateRange}
-            setDateRange={_setDateRange}
+            setDateRange={setDateRange}
           />
         }
       >

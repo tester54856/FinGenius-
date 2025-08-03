@@ -19,11 +19,21 @@ const AddTransactionDrawer = () => {
     setOpen(false);
   };
 
+  const handleOpenChange = (newOpen: boolean) => {
+    setOpen(newOpen);
+  };
+
+  const handleButtonClick = () => {
+    setOpen(true);
+  };
 
   return (
-    <Drawer  direction="right" open={open} onOpenChange={setOpen}>
+    <Drawer direction="right" open={open} onOpenChange={handleOpenChange}>
       <DrawerTrigger asChild>
-        <Button className="!cursor-pointer !text-white">
+        <Button 
+          className="!cursor-pointer !text-white"
+          onClick={handleButtonClick}
+        >
           <PlusIcon className="h-4 w-4" />
           Add Transaction
         </Button>

@@ -9,6 +9,12 @@ interface Props {
 }
 
 const DashboardHeader = ({ title, subtitle, dateRange, setDateRange }: Props) => {
+  const handleDateRangeChange = (range: DateRangeType) => {
+    if (setDateRange) {
+      setDateRange(range);
+    }
+  };
+
   return (
     <div className="flex flex-col lg:flex-row items-start justify-between space-y-7">
       <div className="space-y-1">
@@ -16,7 +22,10 @@ const DashboardHeader = ({ title, subtitle, dateRange, setDateRange }: Props) =>
         <p className="text-white/60 text-sm">{subtitle}</p>
       </div>
       <div className="flex justify-end gap-4 mb-6">
-      <DateRangeSelect dateRange={dateRange || null} setDateRange={(range) => setDateRange?.(range)} />
+        <DateRangeSelect 
+          dateRange={dateRange || null} 
+          setDateRange={handleDateRangeChange} 
+        />
         <AddTransactionDrawer />
       </div>
     </div>
