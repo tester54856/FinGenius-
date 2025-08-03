@@ -1,40 +1,61 @@
-import mongoose from "mongoose";
-
-export enum ReportStatusEnum {
-  SENT = "SENT",
-  PENDING = "PENDING",
-  FAILED = "FAILED",
-  NO_ACTIVITY = "NO_ACTIVITY",
-}
+import mongoose, { Document, Schema } from "mongoose";
 
 export interface ReportDocument extends Document {
   userId: mongoose.Types.ObjectId;
-  period: string;
-  sentDate: Date;
-  status: keyof typeof ReportStatusEnum;
+  title: string;
+  description?: string;
+  type: "expense" | "income" | "summary";
+  dateRange: {
+    start: Date;
+    end: Date;
+  };
+  data: any;
+  status: "pending" | "completed" | "failed";
+  fileUrl?: string;
   createdAt: Date;
   updatedAt: Date;
 }
 
-const reportSchema = new mongoose.Schema<ReportDocument>(
+const reportSchema = new Schema<ReportDocument>(
   {
     userId: {
-      type: mongoose.Schema.Types.ObjectId,
-      required: true,
+      type: Schema.Types.ObjectId,
       ref: "User",
+      required: true,
     },
-    period: {
+    title: {
       type: String,
       required: true,
     },
-    sentDate: {
-      type: Date,
+    description: {
+      type: String,
+    },
+    type: {
+      type: String,
+      enum: ["expense", "income", "summary"],
+      default: "summary",
+    },
+    dateRange: {
+      start: {
+        type: Date,
+        required: true,
+      },
+      end: {
+        type: Date,
+        required: true,
+      },
+    },
+    data: {
+      type: Schema.Types.Mixed,
       required: true,
     },
     status: {
       type: String,
-      enum: Object.values(ReportStatusEnum),
-      default: ReportStatusEnum.PENDING,
+      enum: ["pending", "completed", "failed"],
+      default: "pending",
+    },
+    fileUrl: {
+      type: String,
     },
   },
   {
@@ -42,5 +63,5 @@ const reportSchema = new mongoose.Schema<ReportDocument>(
   }
 );
 
-const ReportModel = mongoose.model<ReportDocument>("Report", reportSchema);
-export default ReportModel;
+export default mongoose.model<ReportDocument>("Report", reportSchema);
+

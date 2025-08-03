@@ -41,16 +41,17 @@ export const updateReportSettingController = asyncHandler(
 
 export const generateReportController = asyncHandler(
   async (req: Request, res: Response) => {
-    const userId = req.user?._id;
-    const { from, to } = req.query;
-    const fromDate = new Date(from as string);
-    const toDate = new Date(to as string);
+    const userId = req.user?.id;
+    const { fromDate, toDate } = req.body;
 
-    const result = await generateReportService(userId, fromDate, toDate);
+    const result = await generateReportService(userId, { 
+      start: new Date(fromDate), 
+      end: new Date(toDate) 
+    });
 
-    return res.status(HTTPSTATUS.OK).json({
-      message: "Report generated successfully",
-      ...result,
+    res.status(HTTPSTATUS.OK).json({
+      success: true,
+      data: result,
     });
   }
 );

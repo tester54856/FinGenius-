@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
 import UserModel from "../models/user.model";
-import ReportSettingModel, { ReportFrequencyEnum } from "../models/report-setting.model";
+import ReportSettingModel from "../models/report-setting.model";
 import { calulateNextReportDate } from "./helper";
 import { Env } from "../config/env.config";
 
@@ -26,7 +26,7 @@ const seedUser = async () => {
     // Create report setting for the user
     const reportSetting = new ReportSettingModel({
       userId: testUser._id,
-      frequency: ReportFrequencyEnum.MONTHLY,
+      frequency: "MONTHLY", // Assuming frequency is now a string
       isEnabled: true,
       nextReportDate: calulateNextReportDate(),
       lastSentDate: null,

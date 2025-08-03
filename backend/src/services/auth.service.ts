@@ -5,9 +5,7 @@ import {
   LoginSchemaType,
   RegisterSchemaType,
 } from "../validators/auth.validator";
-import ReportSettingModel, {
-  ReportFrequencyEnum,
-} from "../models/report-setting.model";
+import ReportSettingModel from "../models/report-setting.model";
 import { calulateNextReportDate } from "../utils/helper";
 import { signJwtToken } from "../utils/jwt";
 
@@ -29,7 +27,7 @@ export const registerService = async (body: RegisterSchemaType) => {
 
       const reportSetting = new ReportSettingModel({
         userId: newUser._id,
-        frequency: ReportFrequencyEnum.MONTHLY,
+        frequency: "MONTHLY",
         isEnabled: true,
         nextReportDate: calulateNextReportDate(),
         lastSentDate: null,

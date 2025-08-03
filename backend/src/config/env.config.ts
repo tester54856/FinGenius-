@@ -7,11 +7,14 @@ const envSchema = z.object({
   MONGO_URI: z.string(),
   JWT_SECRET: z.string(),
   JWT_REFRESH_SECRET: z.string(),
+  JWT_EXPIRES_IN: z.string().default("15m"),
+  JWT_REFRESH_EXPIRES_IN: z.string().default("7d"),
   GEMINI_API_KEY: z.string(),
   CLOUDINARY_CLOUD_NAME: z.string(),
   CLOUDINARY_API_KEY: z.string(),
   CLOUDINARY_API_SECRET: z.string(),
   RESEND_API_KEY: z.string(),
+  RESEND_MAILER_SENDER: z.string().default("noreply@fingenius.com"),
   FRONTEND_ORIGIN: z.string().default("http://localhost:5173"),
 });
 

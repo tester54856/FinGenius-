@@ -3,7 +3,7 @@ import ReportSettingModel from "../../models/report-setting.model";
 import { UserDocument } from "../../models/user.model";
 import mongoose from "mongoose";
 import { generateReportService } from "../../services/report.service";
-import ReportModel, { ReportStatusEnum } from "../../models/report.model";
+import ReportModel from "../../models/report.model";
 import { calulateNextReportDate } from "../../utils/helper";
 import { sendReportEmail } from "../../mailers/report.mailer";
 
@@ -41,7 +41,10 @@ export const processReportJob = async () => {
       const session = await mongoose.startSession();
 
       try {
-        const report = await generateReportService(user.id, from, to);
+        const report = await generateReportService(user.id, { 
+          start: from, 
+          end: to 
+        });
 
         console.log(report, "resport data");
 
@@ -80,7 +83,7 @@ export const processReportJob = async () => {
                     userId: user.id,
                     sentDate: now,
                     period: report.period,
-                    status: ReportStatusEnum.SENT,
+                    status: "SENT",
                     createdAt: now,
                     updatedAt: now,
                   },
@@ -109,8 +112,8 @@ export const processReportJob = async () => {
                       report?.period ||
                       `${format(from, "MMMM d")}–${format(to, "d, yyyy")}`,
                     status: report
-                      ? ReportStatusEnum.FAILED
-                      : ReportStatusEnum.NO_ACTIVITY,
+                      ? "FAILED"
+                      : "NO_ACTIVITY",
                     createdAt: now,
                     updatedAt: now,
                   },

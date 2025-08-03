@@ -6,12 +6,11 @@ import helmet from "helmet";
 import passport from "passport";
 import { Env } from "./config/env.config";
 import { HTTPSTATUS } from "./config/http.config";
-import { errorHandler } from "./middlewares/errorHandler.middleware";
+import errorHandler from "./middlewares/errorHandler.middleware";
 import { BadRequestException } from "./utils/app-error";
 import { asyncHandler } from "./middlewares/asyncHandler.middlerware";
-import connctDatabase from "./config/database.config";
+import connectDB from "./config/database.config";
 import authRoutes from "./routes/auth.route";
-import { passportAuthenticateJwt } from "./config/passport.config";
 import userRoutes from "./routes/user.route";
 import transactionRoutes from "./routes/transaction.route";
 import { initializeCrons } from "./cron";
@@ -92,15 +91,15 @@ if (Env.NODE_ENV === "development") {
 }
 
 app.use(`${BASE_PATH}/auth`, authRoutes);
-app.use(`${BASE_PATH}/user`, passportAuthenticateJwt, userRoutes);
-app.use(`${BASE_PATH}/transaction`, passportAuthenticateJwt, transactionRoutes);
-app.use(`${BASE_PATH}/report`, passportAuthenticateJwt, reportRoutes);
-app.use(`${BASE_PATH}/analytics`, passportAuthenticateJwt, analyticsRoutes);
+app.use(`${BASE_PATH}/user`, passport.authenticate("jwt", { session: false }), userRoutes);
+app.use(`${BASE_PATH}/transaction`, passport.authenticate("jwt", { session: false }), transactionRoutes);
+app.use(`${BASE_PATH}/report`, passport.authenticate("jwt", { session: false }), reportRoutes);
+app.use(`${BASE_PATH}/analytics`, passport.authenticate("jwt", { session: false }), analyticsRoutes);
 
 app.use(errorHandler);
 
 const server = app.listen(Env.PORT, async () => {
-  await connctDatabase();
+  await connectDB();
 
   if (Env.NODE_ENV === "development") {
     await initializeCrons();

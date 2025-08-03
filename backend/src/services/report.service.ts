@@ -1,11 +1,13 @@
 import mongoose from "mongoose";
+import { z } from "zod";
+import Transaction from "../models/transaction.model";
 import ReportSettingModel from "../models/report-setting.model";
 import ReportModel from "../models/report.model";
-import TransactionModel, {
-  TransactionTypeEnum,
-} from "../models/transaction.model";
-import { NotFoundException } from "../utils/app-error";
+import { AppError } from "../utils/app-error";
+import { ErrorCode } from "../enums/error-code.enum";
 import { calulateNextReportDate } from "../utils/helper";
+import { sendReportEmail } from "../mailers/report.mailer";
+import { NotFoundException } from "../utils/app-error";
 import { UpdateReportSettingType } from "../validators/report.validator";
 import { convertToDollarUnit } from "../utils/format-currency";
 import { format } from "date-fns";
@@ -46,182 +48,184 @@ export const getAllReportsService = async (
 
 export const updateReportSettingService = async (
   userId: string,
-  body: UpdateReportSettingType
-) => {
-  const { isEnabled } = body;
-  let nextReportDate: Date | null = null;
+  updateData: any
+): Promise<any> => {
+  try {
+    const existingReportSetting = await ReportSettingModel.findOne({ userId });
 
-  const existingReportSetting = await ReportSettingModel.findOne({
-    userId,
-  });
-  if (!existingReportSetting)
-    throw new NotFoundException("Report setting not found");
-
-  //   const frequency =
-  //     existingReportSetting.frequency || ReportFrequencyEnum.MONTHLY;
-
-  if (isEnabled) {
-    const currentNextReportDate = existingReportSetting.nextReportDate;
-    const now = new Date();
-    if (!currentNextReportDate || currentNextReportDate <= now) {
-      nextReportDate = calulateNextReportDate(
-        existingReportSetting.lastSentDate
-      );
-    } else {
-      nextReportDate = currentNextReportDate;
+    if (!existingReportSetting) {
+      // Create new report setting
+      const newReportSetting = new ReportSettingModel({
+        userId,
+        ...updateData,
+      });
+      await newReportSetting.save();
+      return {
+        success: true,
+        data: newReportSetting,
+      };
     }
+
+    // Update existing report setting
+    const updatedReportSetting = await ReportSettingModel.findOneAndUpdate(
+      { userId },
+      { $set: updateData },
+      { new: true, runValidators: true }
+    );
+
+    return {
+      success: true,
+      data: updatedReportSetting,
+    };
+  } catch (error) {
+    console.error("Update report setting error:", error);
+    throw new AppError(
+      "Failed to update report setting",
+      500,
+      ErrorCode.INTERNAL_SERVER_ERROR
+    );
   }
-
-  console.log(nextReportDate, "nextReportDate");
-
-  existingReportSetting.set({
-    ...body,
-    nextReportDate,
-  });
-
-  await existingReportSetting.save();
 };
 
 export const generateReportService = async (
   userId: string,
-  fromDate: Date,
-  toDate: Date
-) => {
-  const results = await TransactionModel.aggregate([
-    {
-      $match: {
-        userId: new mongoose.Types.ObjectId(userId),
-        date: { $gte: fromDate, $lte: toDate },
+  dateRange: { start: Date; end: Date }
+): Promise<any> => {
+  try {
+    const results = await Transaction.aggregate([
+      {
+        $match: {
+          userId: new mongoose.Types.ObjectId(userId),
+          date: {
+            $gte: dateRange.start,
+            $lte: dateRange.end,
+          },
+        },
       },
-    },
-    {
-      $facet: {
-        summary: [
-          {
-            $group: {
-              _id: null,
-              totalIncome: {
-                $sum: {
-                  $cond: [
-                    { $eq: ["$type", TransactionTypeEnum.INCOME] },
-                    { $abs: "$amount" },
-                    0,
-                  ],
-                },
-              },
-
-              totalExpenses: {
-                $sum: {
-                  $cond: [
-                    { $eq: ["$type", TransactionTypeEnum.EXPENSE] },
-                    { $abs: "$amount" },
-                    0,
-                  ],
-                },
-              },
+      {
+        $group: {
+          _id: null,
+          totalIncome: {
+            $sum: {
+              $cond: [
+                { $eq: ["$type", "income"] },
+                "$amount",
+                0,
+              ],
             },
           },
-        ],
-
-        categories: [
-          {
-            $match: { type: TransactionTypeEnum.EXPENSE },
-          },
-          {
-            $group: {
-              _id: "$category",
-              total: { $sum: { $abs: "$amount" } },
+          totalExpense: {
+            $sum: {
+              $cond: [
+                { $eq: ["$type", "expense"] },
+                "$amount",
+                0,
+              ],
             },
           },
-          {
-            $sort: { total: -1 },
-          },
-          {
-            $limit: 5,
-          },
-        ],
-      },
-    },
-    {
-      $project: {
-        totalIncome: {
-          $arrayElemAt: ["$summary.totalIncome", 0],
+          transactionCount: { $sum: 1 },
         },
-        totalExpenses: {
-          $arrayElemAt: ["$summary.totalExpenses", 0],
-        },
-        categories: 1,
       },
-    },
-  ]);
+    ]);
 
-  if (
-    !results?.length ||
-    (results[0]?.totalIncome === 0 && results[0]?.totalExpenses === 0)
-  )
-    return null;
+    const expenseBreakdown = await Transaction.aggregate([
+      {
+        $match: {
+          userId: new mongoose.Types.ObjectId(userId),
+          date: {
+            $gte: dateRange.start,
+            $lte: dateRange.end,
+          },
+          type: "expense",
+        },
+      },
+      {
+        $group: {
+          _id: "$category",
+          total: { $sum: "$amount" },
+          count: { $sum: 1 },
+        },
+      },
+      {
+        $sort: { total: -1 },
+      },
+    ]);
 
-  const {
-    totalIncome = 0,
-    totalExpenses = 0,
-    categories = [],
-  } = results[0] || {};
+    if (
+      !results?.length ||
+      (results[0]?.totalIncome === 0 && results[0]?.totalExpense === 0)
+    )
+      return null;
 
-  console.log(results[0], "results");
+    const {
+      totalIncome = 0,
+      totalExpense = 0,
+      transactionCount = 0,
+    } = results[0] || {};
 
-  const byCategory = categories.reduce(
-    (acc: any, { _id, total }: any) => {
-      acc[_id] = {
-        amount: convertToDollarUnit(total),
-        percentage:
-          totalExpenses > 0 ? Math.round((total / totalExpenses) * 100) : 0,
-      };
-      return acc;
-    },
-    {} as Record<string, { amount: number; percentage: number }>
-  );
+    console.log(results[0], "results");
 
-  const availableBalance = totalIncome - totalExpenses;
-  const savingsRate = calculateSavingRate(totalIncome, totalExpenses);
+    const byCategory = expenseBreakdown.reduce(
+      (acc: any, { _id, total }: any) => {
+        acc[_id] = {
+          amount: convertToDollarUnit(total),
+          percentage:
+            totalExpense > 0 ? Math.round((total / totalExpense) * 100) : 0,
+        };
+        return acc;
+      },
+      {} as Record<string, { amount: number; percentage: number }>
+    );
 
-  const periodLabel = `${format(fromDate, "MMMM d")} - ${format(toDate, "d, yyyy")}`;
+    const availableBalance = totalIncome - totalExpense;
+    const savingsRate = calculateSavingRate(totalIncome, totalExpense);
 
-  const insights = await generateInsightsAI({
-    totalIncome,
-    totalExpenses,
-    availableBalance,
-    savingsRate,
-    categories: byCategory,
-    periodLabel: periodLabel,
-  });
+    const periodLabel = `${format(dateRange.start, "MMMM d")} - ${format(dateRange.end, "d, yyyy")}`;
 
-  return {
-    period: periodLabel,
-    summary: {
-      income: convertToDollarUnit(totalIncome),
-      expenses: convertToDollarUnit(totalExpenses),
-      balance: convertToDollarUnit(availableBalance),
-      savingsRate: Number(savingsRate.toFixed(1)),
-      topCategories: Object.entries(byCategory)?.map(([name, cat]: any) => ({
-        name,
-        amount: cat.amount,
-        percent: cat.percentage,
-      })),
-    },
-    insights,
-  };
+    const insights = await generateInsightsAI({
+      totalIncome,
+      totalExpense,
+      availableBalance,
+      savingsRate,
+      categories: byCategory,
+      periodLabel: periodLabel,
+    });
+
+    return {
+      period: periodLabel,
+      summary: {
+        income: convertToDollarUnit(totalIncome),
+        expenses: convertToDollarUnit(totalExpense),
+        balance: convertToDollarUnit(availableBalance),
+        savingsRate: Number(savingsRate.toFixed(1)),
+        topCategories: Object.entries(byCategory)?.map(([name, cat]: any) => ({
+          name,
+          amount: cat.amount,
+          percent: cat.percentage,
+        })),
+      },
+      insights,
+    };
+  } catch (error) {
+    console.error("Generate report error:", error);
+    throw new AppError(
+      "Failed to generate report",
+      500,
+      ErrorCode.INTERNAL_SERVER_ERROR
+    );
+  }
 };
 
 async function generateInsightsAI({
   totalIncome,
-  totalExpenses,
+  totalExpense,
   availableBalance,
   savingsRate,
   categories,
   periodLabel,
 }: {
   totalIncome: number;
-  totalExpenses: number;
+  totalExpense: number;
   availableBalance: number;
   savingsRate: number;
   categories: Record<string, { amount: number; percentage: number }>;
@@ -230,7 +234,7 @@ async function generateInsightsAI({
   try {
     const prompt = reportInsightPrompt({
       totalIncome: convertToDollarUnit(totalIncome),
-      totalExpenses: convertToDollarUnit(totalExpenses),
+      totalExpenses: convertToDollarUnit(totalExpense),
       availableBalance: convertToDollarUnit(availableBalance),
       savingsRate: Number(savingsRate.toFixed(1)),
       categories,
@@ -257,8 +261,8 @@ async function generateInsightsAI({
   }
 }
 
-function calculateSavingRate(totalIncome: number, totalExpenses: number) {
+function calculateSavingRate(totalIncome: number, totalExpense: number) {
   if (totalIncome <= 0) return 0;
-  const savingRate = ((totalIncome - totalExpenses) / totalIncome) * 100;
+  const savingRate = ((totalIncome - totalExpense) / totalIncome) * 100;
   return parseFloat(savingRate.toFixed(2));
 }
