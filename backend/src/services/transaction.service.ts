@@ -267,17 +267,51 @@ export const scanReceiptService = async (
   if (!file) throw new BadRequestException("No file uploaded");
 
   try {
-    if (!file.path) throw new BadRequestException("failed to upload file");
+    console.log("Starting receipt scan for file:", file.originalname);
+    console.log("File path:", file.path);
+    console.log("File mimetype:", file.mimetype);
+    console.log("File size:", file.size);
 
-    console.log(file.path);
+    // Check if we have the required API key
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      console.error("❌ GEMINI_API_KEY is not configured");
+      throw new BadRequestException("AI service is not configured - missing API key");
+    }
+    
+    console.log("✅ GEMINI_API_KEY is configured (length:", apiKey.length, ")");
 
-    const responseData = await axios.get(file.path, {
-      responseType: "arraybuffer",
-    });
-    const base64String = Buffer.from(responseData.data).toString("base64");
+    if (!file.path) throw new BadRequestException("Failed to upload file");
 
-    if (!base64String) throw new BadRequestException("Could not process file");
+    let base64String: string;
 
+    // Handle both local file paths and Cloudinary URLs
+    if (file.path.startsWith('http')) {
+      // It's a Cloudinary URL, fetch the image
+      console.log("Fetching image from Cloudinary URL:", file.path);
+      const responseData = await axios.get(file.path, {
+        responseType: "arraybuffer",
+        timeout: 10000, // 10 second timeout
+      });
+      base64String = Buffer.from(responseData.data).toString("base64");
+      console.log("✅ Successfully fetched image from Cloudinary");
+    } else {
+      // It's a local file path, read directly
+      console.log("Reading local file:", file.path);
+      const fs = require('fs');
+      const fileBuffer = fs.readFileSync(file.path);
+      base64String = fileBuffer.toString("base64");
+      console.log("✅ Successfully read local file");
+    }
+
+    if (!base64String) {
+      throw new BadRequestException("Could not process file");
+    }
+
+    console.log("Base64 string length:", base64String.length);
+
+    // Call Google AI API
+    console.log("Calling Google AI API with model:", genAIModel);
     const result = await genAI.models.generateContent({
       model: genAIModel,
       contents: [
@@ -293,21 +327,39 @@ export const scanReceiptService = async (
       },
     });
 
+    console.log("✅ AI Response received:", result.text);
+
     const response = result.text;
     const cleanedText = response?.replace(/```(?:json)?\n?/g, "").trim();
 
-    if (!cleanedText)
+    if (!cleanedText) {
+      console.error("Empty response from AI");
       return {
-        error: "Could not read reciept  content",
+        error: "Could not read receipt content",
       };
-
-    const data = JSON.parse(cleanedText);
-
-    if (!data.amount || !data.date) {
-      return { error: "Reciept missing required information" };
     }
 
-    return {
+    console.log("Cleaned response:", cleanedText);
+
+    let data;
+    try {
+      data = JSON.parse(cleanedText);
+    } catch (parseError) {
+      console.error("JSON parsing error:", parseError);
+      console.error("Raw response:", cleanedText);
+      return {
+        error: "Invalid response format from AI service",
+      };
+    }
+
+    console.log("Parsed data:", data);
+
+    if (!data.amount || !data.date) {
+      console.error("Missing required fields:", { amount: data.amount, date: data.date });
+      return { error: "Receipt missing required information" };
+    }
+
+    const resultData = {
       title: data.title || "Receipt",
       amount: data.amount,
       date: data.date,
@@ -317,7 +369,38 @@ export const scanReceiptService = async (
       type: data.type,
       receiptUrl: file.path,
     };
+
+    console.log("✅ Successfully processed receipt:", resultData);
+    return resultData;
+
   } catch (error) {
-    return { error: "Reciept scanning  service unavailable" };
+    console.error("❌ Receipt scanning error:", error);
+    
+    // Provide more specific error messages
+    if (error instanceof BadRequestException) {
+      throw error;
+    }
+    
+    // Type guard for axios errors
+    if (error && typeof error === 'object' && 'code' in error) {
+      const axiosError = error as any;
+      if (axiosError.code === 'ENOTFOUND' || axiosError.code === 'ECONNREFUSED') {
+        return { error: "Network error - unable to reach AI service" };
+      }
+    }
+    
+    // Type guard for response errors
+    if (error && typeof error === 'object' && 'response' in error) {
+      const responseError = error as any;
+      if (responseError.response?.status === 401) {
+        return { error: "AI service authentication failed - check your API key" };
+      }
+      
+      if (responseError.response?.status === 429) {
+        return { error: "AI service rate limit exceeded" };
+      }
+    }
+    
+    return { error: "Receipt scanning service unavailable" };
   }
 };

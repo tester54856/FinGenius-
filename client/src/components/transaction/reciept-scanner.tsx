@@ -67,11 +67,35 @@ const ReceiptScanner = ({
         .unwrap()
         .then((res) => {
           updateProgress(100);
+          
+          // Check if the response has an error
+          if (res.data?.error) {
+            toast.error(res.data.error);
+            return;
+          }
+          
           onScanComplete(res.data);
           toast.success("Receipt scanned successfully");
         })
         .catch((error) => {
-          toast.error(error.data?.message || "Failed to scan receipt");
+          console.error("Receipt scanning error:", error);
+          
+          // Handle different types of errors
+          if (error.data?.data?.error) {
+            // Backend returned a specific error
+            toast.error(error.data.data.error);
+          } else if (error.data?.message) {
+            // Backend error message
+            toast.error(error.data.message);
+          } else if (error.status === 401) {
+            toast.error("Authentication failed. Please login again.");
+          } else if (error.status === 413) {
+            toast.error("File too large. Please use a smaller image.");
+          } else if (error.status >= 500) {
+            toast.error("Server error. Please try again later.");
+          } else {
+            toast.error("Failed to scan receipt. Please try again.");
+          }
         })
         .finally(() => {
           clearInterval(interval);
