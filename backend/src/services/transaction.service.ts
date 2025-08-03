@@ -1,4 +1,11 @@
 import axios from "axios";
+import mongoose from "mongoose";
+import { z } from "zod";
+import Transaction from "../models/transaction.model";
+import { AppError } from "../utils/app-error";
+import { ErrorCode } from "../enums/error-code.enum";
+import { Env } from "../config/env.config";
+import { uploadToCloudinary } from "../config/cloudinary.config";
 import TransactionModel, {
   TransactionTypeEnum,
 } from "../models/transaction.model";
@@ -8,11 +15,7 @@ import {
   CreateTransactionType,
   UpdateTransactionType,
 } from "../validators/transaction.validator";
-import { genAI, genAIModel } from "../config/google-ai.config";
-import { createPartFromBase64, createUserContent } from "@google/genai";
 import { receiptPrompt } from "../utils/prompt";
-import { AppError } from "../utils/app-error";
-import { ErrorCode } from "../enums/error-code.enum";
 
 export const createTransactionService = async (
   body: CreateTransactionType,

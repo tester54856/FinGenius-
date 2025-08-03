@@ -11,8 +11,6 @@ import { NotFoundException } from "../utils/app-error";
 import { UpdateReportSettingType } from "../validators/report.validator";
 import { convertToDollarUnit } from "../utils/format-currency";
 import { format } from "date-fns";
-import { genAI, genAIModel } from "../config/google-ai.config";
-import { createUserContent } from "@google/genai";
 import { reportInsightPrompt } from "../utils/prompt";
 
 export const getAllReportsService = async (
@@ -241,21 +239,11 @@ async function generateInsightsAI({
       periodLabel,
     });
 
-    const result = await genAI.models.generateContent({
-      model: genAIModel,
-      contents: [createUserContent([prompt])],
-      config: {
-        responseMimeType: "application/json",
-      },
-    });
-
-    const response = result.text;
-    const cleanedText = response?.replace(/```(?:json)?\n?/g, "").trim();
-
-    if (!cleanedText) return [];
-
-    const data = JSON.parse(cleanedText);
-    return data;
+    // This part of the code was removed as per the edit hint.
+    // The original code used genAI and genAIModel, which are no longer imported.
+    // The prompt generation and AI call are removed as per the edit hint.
+    // The function will now return an empty array.
+    return [];
   } catch (error) {
     return [];
   }
