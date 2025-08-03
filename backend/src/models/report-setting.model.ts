@@ -6,7 +6,7 @@ export interface ReportSettingDocument extends Document {
   dayOfWeek?: number;
   dayOfMonth?: number;
   time: string;
-  isActive: boolean;
+  isEnabled: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -39,7 +39,7 @@ const reportSettingSchema = new Schema<ReportSettingDocument>(
       type: String,
       default: "09:00",
     },
-    isActive: {
+    isEnabled: {
       type: Boolean,
       default: true,
     },
