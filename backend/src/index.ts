@@ -37,12 +37,24 @@ const corsOptions = {
     // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
     
+    // For development, allow all origins
+    if (Env.NODE_ENV === 'development') {
+      return callback(null, true);
+    }
+    
+    // Allow all Vercel domains
+    if (origin.includes('vercel.app') || origin.includes('localhost')) {
+      return callback(null, true);
+    }
+    
     const allowedOrigins = [
       Env.FRONTEND_ORIGIN,
       'http://localhost:5173',
       'http://localhost:3000',
       'https://vercel.app',
-      'https://*.vercel.app'
+      'https://*.vercel.app',
+      'https://fin-genius-six.vercel.app',
+      'https://*.fin-genius-six.vercel.app'
     ];
     
     // Check if origin is allowed
@@ -56,11 +68,14 @@ const corsOptions = {
     if (isAllowed) {
       callback(null, true);
     } else {
+      console.log('CORS blocked origin:', origin);
       callback(new Error('Not allowed by CORS'));
     }
   },
   credentials: true,
-  optionsSuccessStatus: 200
+  optionsSuccessStatus: 200,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 };
 
 app.use(cors(corsOptions));
