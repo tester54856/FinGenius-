@@ -1,4 +1,4 @@
-import mongoose, { Schema } from "mongoose";
+import mongoose, { Document, Schema } from "mongoose";
 import { convertToCents, convertToDollarUnit } from "../utils/format-currency";
 
 export enum TransactionStatusEnum {
@@ -29,20 +29,17 @@ export enum PaymentMethodEnum {
 }
 
 export interface TransactionDocument extends Document {
-  userId: mongoose.Types.ObjectId;
-  type: keyof typeof TransactionTypeEnum;
+  userId: string;
   title: string;
   amount: number;
+  type: "INCOME" | "EXPENSE";
   category: string;
-  receiptUrl?: string;
-  recurringInterval?: keyof typeof RecurringIntervalEnum;
+  date: Date;
+  description?: string;
+  isRecurring: boolean;
+  recurringInterval?: "DAILY" | "WEEKLY" | "MONTHLY" | "YEARLY";
   nextRecurringDate?: Date;
   lastProcessed?: Date;
-  isRecurring: boolean;
-  description?: string;
-  date: Date;
-  status: keyof typeof TransactionStatusEnum;
-  paymentMethod: keyof typeof PaymentMethodEnum;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -50,18 +47,14 @@ export interface TransactionDocument extends Document {
 const transactionSchema = new Schema<TransactionDocument>(
   {
     userId: {
-      type: Schema.Types.ObjectId,
+      type: String,
       required: true,
-      ref: "User",
+      index: true, // Add index for user queries
     },
     title: {
       type: String,
       required: true,
-    },
-    type: {
-      type: String,
-      enum: Object.values(TransactionTypeEnum),
-      required: true,
+      trim: true,
     },
     amount: {
       type: Number,
@@ -69,55 +62,55 @@ const transactionSchema = new Schema<TransactionDocument>(
       set: (value: number) => convertToCents(value),
       get: (value: number) => convertToDollarUnit(value),
     },
-
-    description: {
+    type: {
       type: String,
+      required: true,
+      enum: ["INCOME", "EXPENSE"],
+      index: true, // Add index for type filtering
     },
     category: {
       type: String,
       required: true,
-    },
-    receiptUrl: {
-      type: String,
+      trim: true,
+      index: true, // Add index for category filtering
     },
     date: {
       type: Date,
-      default: Date.now,
+      required: true,
+      index: true, // Add index for date range queries
+    },
+    description: {
+      type: String,
+      trim: true,
     },
     isRecurring: {
       type: Boolean,
       default: false,
+      index: true, // Add index for recurring transactions
     },
     recurringInterval: {
       type: String,
-      enum: Object.values(RecurringIntervalEnum),
-      default: null,
+      enum: ["DAILY", "WEEKLY", "MONTHLY", "YEARLY"],
     },
     nextRecurringDate: {
       type: Date,
-      default: null,
+      index: true, // Add index for cron job queries
     },
     lastProcessed: {
       type: Date,
-      default: null,
-    },
-    status: {
-      type: String,
-      enum: Object.values(TransactionStatusEnum),
-      default: TransactionStatusEnum.COMPLETED,
-    },
-    paymentMethod: {
-      type: String,
-      enum: Object.values(PaymentMethodEnum),
-      default: PaymentMethodEnum.CASH,
     },
   },
   {
     timestamps: true,
-    toJSON: { virtuals: true, getters: true },
-    toObject: { virtuals: true, getters: true },
   }
 );
+
+// Compound indexes for common query patterns
+transactionSchema.index({ userId: 1, date: -1 });
+transactionSchema.index({ userId: 1, type: 1 });
+transactionSchema.index({ userId: 1, category: 1 });
+transactionSchema.index({ userId: 1, isRecurring: 1 });
+transactionSchema.index({ nextRecurringDate: 1, isRecurring: 1 });
 
 const TransactionModel = mongoose.model<TransactionDocument>(
   "Transaction",
